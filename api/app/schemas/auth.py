@@ -48,3 +48,17 @@ class RegisterResponse(BaseModel):
     api_key: str  # Plaintext key - only returned once at registration!
     roles: list[str]
     api_key_scopes: list[str]  # Scopes of the initial API key
+
+
+class LoginRequest(BaseModel):
+    """User login request schema."""
+
+    username: str  # Can be username or email
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """User login response schema (tokens are set as cookies)."""
+
+    user_id: str
+    username: str

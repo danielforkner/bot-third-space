@@ -1,14 +1,16 @@
 """Authentication router for user registration, login, and API key management."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.api_key import generate_api_key, get_key_prefix
-from app.auth.password import hash_password
+from app.auth.jwt import create_tokens
+from app.auth.password import hash_password, verify_password
+from app.config import settings
 from app.database import get_db
 from app.models.user import APIKey, User, UserRole
-from app.schemas.auth import RegisterRequest, RegisterResponse
+from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -86,4 +88,84 @@ async def register(
         api_key=plaintext_key,
         roles=DEFAULT_ROLES,
         api_key_scopes=DEFAULT_ROLES,
+    )
+
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def login(
+    data: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """
+    Authenticate user and set JWT tokens as HttpOnly cookies.
+
+    Accepts username or email in the 'username' field.
+    """
+    # Find user by username or email (case-insensitive for email)
+    result = await db.execute(
+        select(User).where(
+            or_(
+                User.username == data.username,
+                User.email.ilike(data.username),
+            )
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    # Verify user exists and password is correct
+    if not user or not user.password_hash:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid username or password",
+                }
+            },
+        )
+
+    if not verify_password(data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid username or password",
+                }
+            },
+        )
+
+    # Create JWT tokens
+    tokens = create_tokens(str(user.id))
+
+    # Set HttpOnly cookies
+    # Access token - short TTL matching token expiry
+    response.set_cookie(
+        key="access_token",
+        value=tokens["access_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+
+    # Refresh token - longer TTL
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/refresh",  # Only sent to refresh endpoint
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+    )
+
+    return LoginResponse(
+        user_id=str(user.id),
+        username=user.username,
     )
