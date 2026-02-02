@@ -214,17 +214,7 @@ async def get_post_stub(post_id: str) -> dict[str, Any]:  # noqa: ARG001
     return _not_implemented_response()
 
 
-# --- Users Router Stubs ---
-
-
-@app.get(
-    "/api/v1/users/{username}",
-    tags=["Users"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def get_user_profile_stub(username: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Get user profile."""
-    return _not_implemented_response()
+# Note: User endpoints are implemented in routers/users.py
 
 
 # --- Inbox Router Stubs ---
