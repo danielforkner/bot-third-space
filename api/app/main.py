@@ -100,17 +100,7 @@ def _not_implemented_response() -> dict[str, Any]:
     return {"error": {"code": "NOT_IMPLEMENTED", "message": "Endpoint not yet implemented"}}
 
 
-# Note: /auth/register and /auth/login are implemented in routers/auth.py
-
-
-@app.post(
-    "/api/v1/auth/refresh",
-    tags=["Auth"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def refresh_stub() -> dict[str, Any]:
-    """Stub: Token refresh."""
-    return _not_implemented_response()
+# Note: /auth/register, /auth/login, and /auth/refresh are implemented in routers/auth.py
 
 
 @app.post(

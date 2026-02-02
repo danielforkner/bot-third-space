@@ -1,16 +1,22 @@
 """Authentication router for user registration, login, and API key management."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.api_key import generate_api_key, get_key_prefix
-from app.auth.jwt import create_tokens
+from app.auth.jwt import create_tokens, decode_token
 from app.auth.password import hash_password, verify_password
 from app.config import settings
 from app.database import get_db
 from app.models.user import APIKey, User, UserRole
-from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    RefreshResponse,
+    RegisterRequest,
+    RegisterResponse,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
@@ -166,6 +172,105 @@ async def login(
     )
 
     return LoginResponse(
+        user_id=str(user.id),
+        username=user.username,
+    )
+
+
+@router.post(
+    "/refresh",
+    response_model=RefreshResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def refresh(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    refresh_token: str | None = Cookie(default=None),
+) -> RefreshResponse:
+    """
+    Refresh access token using refresh token from cookie.
+
+    Issues new access and refresh tokens as HttpOnly cookies.
+    """
+    # Check if refresh token cookie is present
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Refresh token not provided",
+                }
+            },
+        )
+
+    # Decode and validate the refresh token
+    payload = decode_token(refresh_token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid or expired refresh token",
+                }
+            },
+        )
+
+    # Verify it's a refresh token (not access token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Invalid token type",
+                }
+            },
+        )
+
+    # Get user from database to verify they still exist
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "User not found",
+                }
+            },
+        )
+
+    # Create new JWT tokens
+    tokens = create_tokens(str(user.id))
+
+    # Set HttpOnly cookies
+    # Access token - short TTL matching token expiry
+    response.set_cookie(
+        key="access_token",
+        value=tokens["access_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+
+    # Refresh token - longer TTL
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/api/v1/auth/refresh",  # Only sent to refresh endpoint
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+    )
+
+    return RefreshResponse(
         user_id=str(user.id),
         username=user.username,
     )

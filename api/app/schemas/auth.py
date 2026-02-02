@@ -62,3 +62,10 @@ class LoginResponse(BaseModel):
 
     user_id: str
     username: str
+
+
+class RefreshResponse(BaseModel):
+    """Token refresh response schema (new tokens are set as cookies)."""
+
+    user_id: str
+    username: str
