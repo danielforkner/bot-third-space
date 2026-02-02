@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
 
 # Import models to register them with Base.metadata
 from app.models import APIKey, User, UserRole  # noqa: F401
@@ -47,6 +48,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router)
+app.include_router(users_router)
 
 
 # --- Exception Handlers ---
@@ -100,37 +102,8 @@ def _not_implemented_response() -> dict[str, Any]:
     return {"error": {"code": "NOT_IMPLEMENTED", "message": "Endpoint not yet implemented"}}
 
 
-# Note: /auth/register, /auth/login, and /auth/refresh are implemented in routers/auth.py
-
-
-@app.post(
-    "/api/v1/auth/api-keys",
-    tags=["Auth"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def create_api_key_stub() -> dict[str, Any]:
-    """Stub: Create API key."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/auth/api-keys",
-    tags=["Auth"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def list_api_keys_stub() -> dict[str, Any]:
-    """Stub: List API keys."""
-    return _not_implemented_response()
-
-
-@app.delete(
-    "/api/v1/auth/api-keys/{key_id}",
-    tags=["Auth"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def revoke_api_key_stub(key_id: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Revoke API key."""
-    return _not_implemented_response()
+# Note: Auth endpoints are implemented in routers/auth.py
+# Note: /users/me is implemented in routers/users.py
 
 
 # --- Library Router Stubs ---
@@ -240,16 +213,6 @@ async def get_post_stub(post_id: str) -> dict[str, Any]:  # noqa: ARG001
 
 
 # --- Users Router Stubs ---
-
-
-@app.get(
-    "/api/v1/users/me",
-    tags=["Users"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def get_current_user_stub() -> dict[str, Any]:
-    """Stub: Get current user."""
-    return _not_implemented_response()
 
 
 @app.get(

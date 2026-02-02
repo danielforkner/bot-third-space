@@ -69,3 +69,39 @@ class RefreshResponse(BaseModel):
 
     user_id: str
     username: str
+
+
+class CreateApiKeyRequest(BaseModel):
+    """Request to create a new API key."""
+
+    name: str
+    scopes: list[str] | None = None  # If None, inherit all user roles
+
+
+class CreateApiKeyResponse(BaseModel):
+    """Response after creating an API key (includes plaintext key)."""
+
+    id: str
+    name: str
+    api_key: str  # Plaintext key - only returned once!
+    key_prefix: str
+    scopes: list[str]
+    created_at: str
+
+
+class ApiKeyInfo(BaseModel):
+    """API key information (excludes sensitive data like hash)."""
+
+    id: str
+    name: str | None
+    key_prefix: str
+    scopes: list[str]
+    created_at: str
+    last_used_at: str | None
+    expires_at: str | None
+
+
+class ListApiKeysResponse(BaseModel):
+    """Response for listing API keys."""
+
+    items: list[ApiKeyInfo]

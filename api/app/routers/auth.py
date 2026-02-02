@@ -1,16 +1,24 @@
 """Authentication router for user registration, login, and API key management."""
 
+from datetime import datetime, timezone
+from uuid import UUID
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.api_key import generate_api_key, get_key_prefix
+from app.auth.dependencies import get_current_user
 from app.auth.jwt import create_tokens, decode_token
 from app.auth.password import hash_password, verify_password
 from app.config import settings
 from app.database import get_db
 from app.models.user import APIKey, User, UserRole
 from app.schemas.auth import (
+    ApiKeyInfo,
+    CreateApiKeyRequest,
+    CreateApiKeyResponse,
+    ListApiKeysResponse,
     LoginRequest,
     LoginResponse,
     RefreshResponse,
@@ -274,3 +282,165 @@ async def refresh(
         user_id=str(user.id),
         username=user.username,
     )
+
+
+# --- API Key Management Endpoints ---
+
+
+@router.post(
+    "/api-keys",
+    response_model=CreateApiKeyResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_api_key(
+    data: CreateApiKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> CreateApiKeyResponse:
+    """
+    Create a new API key for the authenticated user.
+
+    The plaintext key is only returned once - store it securely!
+    Scopes must be a subset of the user's roles.
+    """
+    user, current_api_key = auth
+
+    # Get user's roles
+    user_roles = {role.role for role in user.roles}
+
+    # Determine scopes for new key
+    if data.scopes is None:
+        # Default to user's roles
+        scopes = list(user_roles)
+    else:
+        # Validate requested scopes are subset of user's roles
+        requested_scopes = set(data.scopes)
+        if not requested_scopes.issubset(user_roles):
+            invalid_scopes = requested_scopes - user_roles
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": {
+                        "code": "FORBIDDEN",
+                        "message": f"Cannot grant scopes you don't have: {', '.join(invalid_scopes)}",
+                    }
+                },
+            )
+        scopes = data.scopes
+
+    # Generate new API key
+    plaintext_key, key_hash = generate_api_key()
+    api_key = APIKey(
+        user_id=user.id,
+        key_hash=key_hash,
+        key_prefix=get_key_prefix(plaintext_key),
+        name=data.name,
+        scopes=scopes,
+    )
+    db.add(api_key)
+    await db.commit()
+    await db.refresh(api_key)
+
+    return CreateApiKeyResponse(
+        id=str(api_key.id),
+        name=api_key.name,
+        api_key=plaintext_key,
+        key_prefix=api_key.key_prefix,
+        scopes=api_key.scopes,
+        created_at=api_key.created_at.isoformat(),
+    )
+
+
+@router.get(
+    "/api-keys",
+    response_model=ListApiKeysResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_api_keys(
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> ListApiKeysResponse:
+    """
+    List all active (non-revoked) API keys for the authenticated user.
+
+    Does not include the key hash or plaintext key.
+    """
+    user, _ = auth
+
+    result = await db.execute(
+        select(APIKey)
+        .where(APIKey.user_id == user.id)
+        .where(APIKey.revoked_at.is_(None))
+        .order_by(APIKey.created_at.desc())
+    )
+    api_keys = result.scalars().all()
+
+    items = [
+        ApiKeyInfo(
+            id=str(key.id),
+            name=key.name,
+            key_prefix=key.key_prefix,
+            scopes=key.scopes or [],
+            created_at=key.created_at.isoformat(),
+            last_used_at=key.last_used_at.isoformat() if key.last_used_at else None,
+            expires_at=key.expires_at.isoformat() if key.expires_at else None,
+        )
+        for key in api_keys
+    ]
+
+    return ListApiKeysResponse(items=items)
+
+
+@router.delete(
+    "/api-keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_api_key(
+    key_id: str,
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> None:
+    """
+    Revoke an API key (soft delete).
+
+    The key will no longer be usable for authentication.
+    """
+    user, _ = auth
+
+    # Validate UUID format
+    try:
+        key_uuid = UUID(key_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "API key not found",
+                }
+            },
+        )
+
+    # Find the key
+    result = await db.execute(
+        select(APIKey)
+        .where(APIKey.id == key_uuid)
+        .where(APIKey.user_id == user.id)
+        .where(APIKey.revoked_at.is_(None))
+    )
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "API key not found",
+                }
+            },
+        )
+
+    # Soft delete by setting revoked_at
+    api_key.revoked_at = datetime.now(timezone.utc)
+    await db.commit()

@@ -1,6 +1,10 @@
 """Pydantic schemas for request/response validation."""
 
 from app.schemas.auth import (
+    ApiKeyInfo,
+    CreateApiKeyRequest,
+    CreateApiKeyResponse,
+    ListApiKeysResponse,
     LoginRequest,
     LoginResponse,
     RefreshResponse,
@@ -14,4 +18,8 @@ __all__ = [
     "LoginRequest",
     "LoginResponse",
     "RefreshResponse",
+    "CreateApiKeyRequest",
+    "CreateApiKeyResponse",
+    "ApiKeyInfo",
+    "ListApiKeysResponse",
 ]
