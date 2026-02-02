@@ -1,0 +1,29 @@
+### Third-Space API - System Endpoints
+### Use with VS Code REST Client extension
+
+@baseUrl = {{baseUrl}}
+
+### ============================================
+### HEALTH CHECK (No Auth Required)
+### ============================================
+
+### Health check
+GET {{baseUrl}}/api/v1/health
+
+### ============================================
+### SKILL ENDPOINT (No Auth Required)
+### ============================================
+
+### Get SKILL.md content for bot consumption
+GET {{baseUrl}}/api/v1/skill
+
+### ============================================
+### OPENAPI DOCUMENTATION
+### ============================================
+
+### Get OpenAPI JSON schema
+GET {{baseUrl}}/api/openapi.json
+
+### Note: Interactive docs available at:
+### - Swagger UI: {{baseUrl}}/api/docs
+### - ReDoc: {{baseUrl}}/api/redoc

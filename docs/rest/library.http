@@ -1,0 +1,127 @@
+### Third-Space API - Library Endpoints
+### Use with VS Code REST Client extension
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### LIST & SEARCH ARTICLES
+### ============================================
+
+### List all articles (paginated)
+GET {{baseUrl}}/api/v1/library/articles
+X-API-Key: {{apiKey}}
+
+### List articles with pagination
+GET {{baseUrl}}/api/v1/library/articles?limit=10
+X-API-Key: {{apiKey}}
+
+### List articles with cursor pagination
+GET {{baseUrl}}/api/v1/library/articles?cursor=2024-01-15T10:30:00Z&limit=10
+X-API-Key: {{apiKey}}
+
+### Search articles
+GET {{baseUrl}}/api/v1/library/search?q=machine+learning&limit=20
+X-API-Key: {{apiKey}}
+
+### ============================================
+### CREATE ARTICLE
+### ============================================
+
+### Create a new article (auto-generate slug from title)
+# @name createArticle
+POST {{baseUrl}}/api/v1/library/articles
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "title": "Introduction to Machine Learning",
+  "content_md": "# Machine Learning Basics\n\nMachine learning is a subset of artificial intelligence...\n\n## Key Concepts\n\n- Supervised Learning\n- Unsupervised Learning\n- Reinforcement Learning"
+}
+
+### Create article with custom slug
+POST {{baseUrl}}/api/v1/library/articles
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "title": "Advanced Neural Networks",
+  "slug": "advanced-neural-networks-guide",
+  "content_md": "# Advanced Neural Networks\n\nThis guide covers advanced topics in neural networks..."
+}
+
+### ============================================
+### GET ARTICLE
+### ============================================
+
+### Get article by slug
+# @name getArticle
+GET {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning
+X-API-Key: {{apiKey}}
+
+### Store version for optimistic concurrency
+@articleVersion = {{getArticle.response.body.current_version}}
+
+### ============================================
+### UPDATE ARTICLE (Optimistic Concurrency)
+### ============================================
+
+### Update article (requires If-Match header with current version)
+PATCH {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+If-Match: {{articleVersion}}
+
+{
+  "title": "Introduction to Machine Learning (Updated)",
+  "content_md": "# Machine Learning Basics - Updated\n\nThis is the updated content...",
+  "edit_summary": "Updated introduction section"
+}
+
+### Update with version mismatch (will return 409 Conflict)
+PATCH {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+If-Match: 999
+
+{
+  "title": "This will fail",
+  "content_md": "Conflict test"
+}
+
+### ============================================
+### ARTICLE REVISIONS
+### ============================================
+
+### List article revisions
+GET {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning/revisions
+X-API-Key: {{apiKey}}
+
+### Get specific revision
+GET {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning/revisions/1
+X-API-Key: {{apiKey}}
+
+### ============================================
+### BATCH READ
+### ============================================
+
+### Batch read multiple articles by slug
+POST {{baseUrl}}/api/v1/library/batch-read
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "slugs": [
+    "introduction-to-machine-learning",
+    "advanced-neural-networks-guide",
+    "nonexistent-article"
+  ]
+}
+
+### ============================================
+### DELETE ARTICLE
+### ============================================
+
+### Delete article (requires library:delete scope)
+DELETE {{baseUrl}}/api/v1/library/articles/introduction-to-machine-learning
+X-API-Key: {{apiKey}}

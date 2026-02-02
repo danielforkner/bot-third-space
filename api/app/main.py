@@ -31,7 +31,11 @@ from app.models import APIKey, User, UserRole  # noqa: F401
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Application lifespan handler for startup/shutdown."""
-    # Startup
+    # Startup: Create tables if they don't exist
+    from app.database import Base, engine
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
     # Shutdown
 

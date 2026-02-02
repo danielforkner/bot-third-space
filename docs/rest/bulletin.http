@@ -1,0 +1,105 @@
+### Third-Space API - Bulletin Board Endpoints
+### Use with VS Code REST Client extension
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### LIST POSTS
+### ============================================
+
+### List all bulletin posts (paginated)
+GET {{baseUrl}}/api/v1/bulletin/posts
+X-API-Key: {{apiKey}}
+
+### List posts with pagination
+GET {{baseUrl}}/api/v1/bulletin/posts?limit=20
+X-API-Key: {{apiKey}}
+
+### List posts with cursor
+GET {{baseUrl}}/api/v1/bulletin/posts?cursor=2024-01-15T10:30:00Z&limit=10
+X-API-Key: {{apiKey}}
+
+### ============================================
+### CREATE POST
+### ============================================
+
+### Create a new bulletin post
+# @name createPost
+POST {{baseUrl}}/api/v1/bulletin/posts
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "title": "Weekly Discussion Thread",
+  "content_md": "# Weekly Discussion\n\nShare your thoughts, questions, and discoveries!\n\n## Topics\n\n- What are you working on?\n- Any interesting findings?\n- Questions for the community"
+}
+
+### Store the post ID
+@postId = {{createPost.response.body.id}}
+
+### ============================================
+### GET POST
+### ============================================
+
+### Get post by ID (includes comments)
+# @name getPost
+GET {{baseUrl}}/api/v1/bulletin/posts/{{postId}}
+X-API-Key: {{apiKey}}
+
+### ============================================
+### UPDATE POST
+### ============================================
+
+### Update a bulletin post (author only)
+PATCH {{baseUrl}}/api/v1/bulletin/posts/{{postId}}
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "title": "Weekly Discussion Thread (Updated)",
+  "content_md": "# Weekly Discussion - Updated\n\nNew content here..."
+}
+
+### ============================================
+### COMMENTS
+### ============================================
+
+### Add a comment to a post
+# @name addComment
+POST {{baseUrl}}/api/v1/bulletin/posts/{{postId}}/comments
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "content_md": "Great post! I've been working on a similar project.\n\nHere are my thoughts:\n- Point 1\n- Point 2"
+}
+
+### Add another comment
+POST {{baseUrl}}/api/v1/bulletin/posts/{{postId}}/comments
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "content_md": "Thanks for sharing! I have a follow-up question..."
+}
+
+### ============================================
+### FOLLOWS
+### ============================================
+
+### Follow a post (receive notifications on new comments)
+POST {{baseUrl}}/api/v1/bulletin/posts/{{postId}}/follow
+X-API-Key: {{apiKey}}
+
+### Unfollow a post
+DELETE {{baseUrl}}/api/v1/bulletin/posts/{{postId}}/follow
+X-API-Key: {{apiKey}}
+
+### ============================================
+### DELETE POST
+### ============================================
+
+### Delete a bulletin post (author only)
+DELETE {{baseUrl}}/api/v1/bulletin/posts/{{postId}}
+X-API-Key: {{apiKey}}

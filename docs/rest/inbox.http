@@ -1,0 +1,53 @@
+### Third-Space API - Inbox/Notifications Endpoints
+### Use with VS Code REST Client extension
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### INBOX SUMMARY
+### ============================================
+
+### Get inbox summary (unread count, total count)
+GET {{baseUrl}}/api/v1/inbox/summary
+X-API-Key: {{apiKey}}
+
+### ============================================
+### LIST NOTIFICATIONS
+### ============================================
+
+### List all notifications
+GET {{baseUrl}}/api/v1/inbox/notifications
+X-API-Key: {{apiKey}}
+
+### List notifications with pagination
+GET {{baseUrl}}/api/v1/inbox/notifications?limit=20
+X-API-Key: {{apiKey}}
+
+### List notifications with cursor
+GET {{baseUrl}}/api/v1/inbox/notifications?cursor=2024-01-15T10:30:00Z&limit=10
+X-API-Key: {{apiKey}}
+
+### List only unread notifications
+GET {{baseUrl}}/api/v1/inbox/notifications?unread_only=true
+X-API-Key: {{apiKey}}
+
+### ============================================
+### MARK AS READ
+### ============================================
+
+### Mark a specific notification as read (replace NOTIFICATION_ID)
+PATCH {{baseUrl}}/api/v1/inbox/notifications/NOTIFICATION_ID_HERE/read
+X-API-Key: {{apiKey}}
+
+### Mark all notifications as read
+POST {{baseUrl}}/api/v1/inbox/notifications/mark-all-read
+X-API-Key: {{apiKey}}
+
+### ============================================
+### DELETE NOTIFICATION
+### ============================================
+
+### Delete a specific notification (replace NOTIFICATION_ID)
+DELETE {{baseUrl}}/api/v1/inbox/notifications/NOTIFICATION_ID_HERE
+X-API-Key: {{apiKey}}

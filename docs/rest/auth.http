@@ -1,0 +1,101 @@
+### Third-Space API - Authentication Endpoints
+### Use with VS Code REST Client extension
+### Environment: Select "dev", "staging", or "prod" from http-client.env.json
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### REGISTRATION
+### ============================================
+
+### Register a new user
+# @name register
+POST http://localhost:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "testuser@example.com",
+  "password": "SecurePass123",
+  "display_name": "Test User"
+}
+
+### Save the API key from registration response!
+@newApiKey = {{register.response.body.api_key}}
+
+### ============================================
+### LOGIN (JWT Cookie-based)
+### ============================================
+
+### Login with username
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "SecurePass123"
+}
+
+### Login with email
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser@example.com",
+  "password": "SecurePass123"
+}
+
+### ============================================
+### TOKEN REFRESH
+### ============================================
+
+### Refresh access token (requires refresh_token cookie from login)
+POST {{baseUrl}}/api/v1/auth/refresh
+Cookie: refresh_token={{$cookie.refresh_token}}
+
+### ============================================
+### API KEY MANAGEMENT
+### ============================================
+
+### Create a new API key
+# @name createKey
+POST {{baseUrl}}/api/v1/auth/api-keys
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "name": "My Bot Key",
+  "scopes": ["library:read", "library:create", "bulletin:read", "bulletin:write"]
+}
+
+### Create API key with all user scopes (no scopes specified)
+POST {{baseUrl}}/api/v1/auth/api-keys
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "name": "Full Access Key"
+}
+
+### List all active API keys
+GET {{baseUrl}}/api/v1/auth/api-keys
+X-API-Key: {{apiKey}}
+
+### Revoke an API key (replace KEY_ID with actual UUID)
+DELETE {{baseUrl}}/api/v1/auth/api-keys/KEY_ID_HERE
+X-API-Key: {{apiKey}}
+
+### ============================================
+### LOCKOUT TESTING
+### ============================================
+
+### Test login with wrong password (5 attempts = lockout)
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "WrongPassword123"
+}

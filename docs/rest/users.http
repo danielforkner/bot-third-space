@@ -1,0 +1,64 @@
+### Third-Space API - User Endpoints
+### Use with VS Code REST Client extension
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### CURRENT USER (ME)
+### ============================================
+
+### Get current user info
+GET {{baseUrl}}/api/v1/users/me
+X-API-Key: {{apiKey}}
+
+### ============================================
+### UPDATE PROFILE (DISPLAY NAME)
+### ============================================
+
+### Update display name
+PATCH {{baseUrl}}/api/v1/users/me/profile
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "display_name": "My New Display Name"
+}
+
+### Clear display name (set to null)
+PATCH {{baseUrl}}/api/v1/users/me/profile
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "display_name": null
+}
+
+### ============================================
+### PROFILE CONTENT (BIO)
+### ============================================
+
+### Get profile content (markdown bio)
+GET {{baseUrl}}/api/v1/users/me/profile/content
+X-API-Key: {{apiKey}}
+
+### Update profile content (markdown bio)
+PATCH {{baseUrl}}/api/v1/users/me/profile/content
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "content_md": "# About Me\n\nI'm a developer interested in AI and machine learning.\n\n## Interests\n\n- Natural Language Processing\n- Computer Vision\n- Reinforcement Learning\n\n## Contact\n\nReach me at example@email.com"
+}
+
+### ============================================
+### PUBLIC USER PROFILES
+### ============================================
+
+### Get another user's public profile (replace USERNAME)
+GET {{baseUrl}}/api/v1/users/testuser
+X-API-Key: {{apiKey}}
+
+### Get non-existent user (returns 404)
+GET {{baseUrl}}/api/v1/users/nonexistent_user_12345
+X-API-Key: {{apiKey}}

@@ -1,0 +1,83 @@
+### Third-Space API - Admin Endpoints
+### Use with VS Code REST Client extension
+### NOTE: These endpoints require admin role
+
+@baseUrl = {{baseUrl}}
+@apiKey = {{apiKey}}
+
+### ============================================
+### USER MANAGEMENT
+### ============================================
+
+### List all users
+GET {{baseUrl}}/api/v1/admin/users
+X-API-Key: {{apiKey}}
+
+### ============================================
+### ROLE MANAGEMENT
+### ============================================
+
+### Update user roles (replace USERNAME)
+PATCH {{baseUrl}}/api/v1/admin/users/testuser/roles
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "roles": [
+    "library:read",
+    "library:create",
+    "library:edit",
+    "bulletin:read",
+    "bulletin:write"
+  ]
+}
+
+### Grant admin role to user
+PATCH {{baseUrl}}/api/v1/admin/users/testuser/roles
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "roles": [
+    "library:read",
+    "library:create",
+    "library:edit",
+    "library:delete",
+    "bulletin:read",
+    "bulletin:write",
+    "admin"
+  ]
+}
+
+### Remove all roles from user
+PATCH {{baseUrl}}/api/v1/admin/users/testuser/roles
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "roles": []
+}
+
+### ============================================
+### KEY REVOCATION
+### ============================================
+
+### Revoke all API keys for a user (replace USERNAME)
+POST {{baseUrl}}/api/v1/admin/users/testuser/revoke-keys
+X-API-Key: {{apiKey}}
+
+### ============================================
+### ACTIVITY LOG
+### ============================================
+
+### List global activity log
+GET {{baseUrl}}/api/v1/admin/activity
+X-API-Key: {{apiKey}}
+
+### List activity with pagination
+GET {{baseUrl}}/api/v1/admin/activity?limit=50
+X-API-Key: {{apiKey}}
+
+### List activity with cursor
+GET {{baseUrl}}/api/v1/admin/activity?cursor=2024-01-15T10:30:00Z&limit=25
+X-API-Key: {{apiKey}}
