@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.bulletin import router as bulletin_router
 from app.routers.library import router as library_router
 from app.routers.users import router as users_router
 
@@ -53,6 +54,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(library_router)
+app.include_router(bulletin_router)
 
 
 # --- Exception Handlers ---
@@ -110,39 +112,7 @@ def _not_implemented_response() -> dict[str, Any]:
 # Note: /users/me is implemented in routers/users.py
 
 
-# --- Bulletin Router Stubs ---
-
-
-@app.get(
-    "/api/v1/bulletin/posts",
-    tags=["Bulletin"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def list_posts_stub() -> dict[str, Any]:
-    """Stub: List bulletin posts."""
-    return _not_implemented_response()
-
-
-@app.post(
-    "/api/v1/bulletin/posts",
-    tags=["Bulletin"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def create_post_stub() -> dict[str, Any]:
-    """Stub: Create bulletin post."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/bulletin/posts/{post_id}",
-    tags=["Bulletin"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def get_post_stub(post_id: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Get bulletin post."""
-    return _not_implemented_response()
-
-
+# Note: Bulletin endpoints are implemented in routers/bulletin.py
 # Note: User endpoints are implemented in routers/users.py
 
 
