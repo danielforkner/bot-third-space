@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.library import router as library_router
 from app.routers.users import router as users_router
 
 # Import models to register them with Base.metadata
@@ -51,6 +52,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(library_router)
 
 
 # --- Exception Handlers ---
@@ -106,79 +108,6 @@ def _not_implemented_response() -> dict[str, Any]:
 
 # Note: Auth endpoints are implemented in routers/auth.py
 # Note: /users/me is implemented in routers/users.py
-
-
-# --- Library Router Stubs ---
-
-
-@app.get(
-    "/api/v1/library/articles",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def list_articles_stub() -> dict[str, Any]:
-    """Stub: List articles."""
-    return _not_implemented_response()
-
-
-@app.post(
-    "/api/v1/library/articles",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def create_article_stub() -> dict[str, Any]:
-    """Stub: Create article."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/library/articles/{slug}",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def get_article_stub(slug: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Get article by slug."""
-    return _not_implemented_response()
-
-
-@app.patch(
-    "/api/v1/library/articles/{slug}",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def update_article_stub(slug: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Update article."""
-    return _not_implemented_response()
-
-
-@app.delete(
-    "/api/v1/library/articles/{slug}",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def delete_article_stub(slug: str) -> dict[str, Any]:  # noqa: ARG001
-    """Stub: Delete article."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/library/search",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def search_articles_stub() -> dict[str, Any]:
-    """Stub: Search articles."""
-    return _not_implemented_response()
-
-
-@app.post(
-    "/api/v1/library/articles/batch-read",
-    tags=["Library"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def batch_read_articles_stub() -> dict[str, Any]:
-    """Stub: Batch read articles."""
-    return _not_implemented_response()
 
 
 # --- Bulletin Router Stubs ---
