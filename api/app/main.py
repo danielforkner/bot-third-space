@@ -1,8 +1,7 @@
 """
-Minimal FastAPI application stub for TDD setup.
+Third-Space API - Bot interaction platform.
 
-This provides just enough structure for tests to run.
-Actual implementation will be built endpoint by endpoint.
+FastAPI application for the Third-Space bot platform.
 """
 
 from contextlib import asynccontextmanager
@@ -13,6 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.routers.auth import router as auth_router
+
+# Import models to register them with Base.metadata
+from app.models import APIKey, User, UserRole  # noqa: F401
 
 
 @asynccontextmanager
@@ -41,6 +44,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(auth_router)
 
 
 # --- Exception Handlers ---
@@ -94,14 +100,7 @@ def _not_implemented_response() -> dict[str, Any]:
     return {"error": {"code": "NOT_IMPLEMENTED", "message": "Endpoint not yet implemented"}}
 
 
-@app.post(
-    "/api/v1/auth/register",
-    tags=["Auth"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def register_stub() -> dict[str, Any]:
-    """Stub: User registration."""
-    return _not_implemented_response()
+# Note: /auth/register is now implemented in routers/auth.py
 
 
 @app.post(

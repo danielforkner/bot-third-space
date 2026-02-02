@@ -1,82 +1,67 @@
 # Running Tests
 
-## Prerequisites
+## Option 1: Docker (Recommended)
 
-1. Docker installed and running
-2. Python 3.11+ with dependencies installed
-
-## Setup
-
-### Start the test database
-
-```bash
-cd /Users/tehmacodin/Repos/third-space
-docker compose -f docker-compose.test.yml up -d
-```
-
-Verify the database is ready:
-
-```bash
-docker compose -f docker-compose.test.yml exec test-db pg_isready -U test
-```
-
-### Install dependencies
-
-```bash
-cd api
-pip install -e ".[dev]"
-```
-
-Or install directly:
-
-```bash
-pip install fastapi uvicorn sqlalchemy asyncpg pytest pytest-asyncio pytest-cov httpx freezegun faker factory-boy
-```
-
-## Running Tests
+Run tests in a Docker container with all dependencies pre-installed.
 
 ### Run all tests
 
 ```bash
-cd api
-pytest tests/ -v
+docker compose --profile test run --rm test
 ```
 
 ### Run specific test file
 
 ```bash
-pytest tests/test_health.py -v
-pytest tests/auth/test_register.py -v
+docker compose --profile test run --rm test pytest tests/auth/test_register.py -v
 ```
 
 ### Run specific test class
 
 ```bash
-pytest tests/auth/test_register.py::TestRegisterSuccess -v
+docker compose --profile test run --rm test pytest tests/auth/test_register.py::TestRegisterSuccess -v
 ```
 
-### Run specific test
+### Skip slow tests (rate limiting)
 
 ```bash
-pytest tests/auth/test_register.py::TestRegisterSuccess::test_register_with_valid_data_returns_201 -v
+docker compose --profile test run --rm test pytest tests/ -v -m "not slow"
 ```
 
 ### Run with coverage
 
 ```bash
-pytest tests/ --cov=app --cov-report=term-missing
+docker compose --profile test run --rm test pytest tests/ --cov=app --cov-report=term-missing
 ```
 
-### Skip slow tests
+### Start the test database
 
 ```bash
-pytest tests/ -v -m "not slow"
+docker compose up test-db -d
 ```
 
-## Teardown
+Verify the database is ready:
+
+```bash
+docker compose exec test-db pg_isready -U test
+```
+
+### Teardown
 
 Stop the test database:
 
 ```bash
-docker compose -f docker-compose.test.yml down
+docker compose down test-db
 ```
+
+## Test Database
+
+Tests run against a separate PostgreSQL database:
+
+- **Host:** localhost
+- **Port:** 5433 (not 5432)
+- **Database:** third_space_test
+- **User:** test
+- **Password:** test
+
+The test database uses `tmpfs` (RAM-backed storage) for speed and is completely isolated from the development database.

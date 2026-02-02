@@ -18,6 +18,11 @@ from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 
+# Import models so they're registered with Base.metadata before table creation
+from app.models.user import APIKey, User, UserRole
+from app.auth.api_key import generate_api_key, get_key_prefix
+from app.auth.password import hash_password
+
 # Test database URL (uses separate test database)
 TEST_DATABASE_URL = settings.test_database_url
 
@@ -124,8 +129,63 @@ def valid_login_data() -> dict[str, str]:
 
 
 # --- User Fixtures ---
-# Note: These will be fully implemented once the User model exists.
-# For now, they're placeholders that tests can reference.
+
+
+DEFAULT_ROLES = [
+    "library:read",
+    "library:create",
+    "library:edit",
+    "bulletin:read",
+    "bulletin:write",
+]
+
+ADMIN_ROLES = DEFAULT_ROLES + ["library:delete", "admin"]
+
+
+async def _create_user(
+    db_session: AsyncSession,
+    username: str,
+    email: str,
+    password: str,
+    roles: list[str],
+) -> dict[str, Any]:
+    """Helper to create a user with roles and API key in the database."""
+    # Create user
+    user = User(
+        username=username,
+        email=email.lower(),
+        password_hash=hash_password(password),
+        display_name=username.title(),
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    # Add roles
+    for role in roles:
+        db_session.add(UserRole(user_id=user.id, role=role))
+
+    # Create API key
+    plaintext_key, key_hash = generate_api_key()
+    api_key = APIKey(
+        user_id=user.id,
+        key_hash=key_hash,
+        key_prefix=get_key_prefix(plaintext_key),
+        name="Test key",
+        scopes=roles,
+    )
+    db_session.add(api_key)
+
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    return {
+        "user_id": str(user.id),
+        "username": user.username,
+        "email": user.email,
+        "password": password,
+        "api_key": plaintext_key,
+        "roles": roles,
+    }
 
 
 @pytest_asyncio.fixture
@@ -134,73 +194,38 @@ async def test_user(db_session: AsyncSession) -> dict[str, Any]:
     Create a standard test user with default roles and an API key.
 
     Returns dict with user data and plaintext API key.
-
-    Note: This fixture will be fully implemented once User model exists.
-    Currently returns a mock structure for test development.
     """
-    # Placeholder - will be implemented with actual model creation
-    return {
-        "user_id": "00000000-0000-0000-0000-000000000001",
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "TestPassword123!",
-        "api_key": "ts_live_placeholder_key_for_testing",
-        "roles": [
-            "library:read",
-            "library:create",
-            "library:edit",
-            "bulletin:read",
-            "bulletin:write",
-        ],
-    }
+    return await _create_user(
+        db_session,
+        username="testuser",
+        email="test@example.com",
+        password="TestPassword123!",
+        roles=DEFAULT_ROLES,
+    )
 
 
 @pytest_asyncio.fixture
 async def test_admin(db_session: AsyncSession) -> dict[str, Any]:
-    """
-    Create an admin user with all roles including 'admin'.
-
-    Note: This fixture will be fully implemented once User model exists.
-    """
-    return {
-        "user_id": "00000000-0000-0000-0000-000000000002",
-        "username": "adminuser",
-        "email": "admin@example.com",
-        "password": "AdminPassword123!",
-        "api_key": "ts_live_admin_placeholder_key",
-        "roles": [
-            "library:read",
-            "library:create",
-            "library:edit",
-            "library:delete",
-            "bulletin:read",
-            "bulletin:write",
-            "admin",
-        ],
-    }
+    """Create an admin user with all roles including 'admin'."""
+    return await _create_user(
+        db_session,
+        username="adminuser",
+        email="admin@example.com",
+        password="AdminPassword123!",
+        roles=ADMIN_ROLES,
+    )
 
 
 @pytest_asyncio.fixture
 async def second_user(db_session: AsyncSession) -> dict[str, Any]:
-    """
-    Create a second user for testing ownership/authorization scenarios.
-
-    Note: This fixture will be fully implemented once User model exists.
-    """
-    return {
-        "user_id": "00000000-0000-0000-0000-000000000003",
-        "username": "seconduser",
-        "email": "second@example.com",
-        "password": "SecondPassword123!",
-        "api_key": "ts_live_second_placeholder_key",
-        "roles": [
-            "library:read",
-            "library:create",
-            "library:edit",
-            "bulletin:read",
-            "bulletin:write",
-        ],
-    }
+    """Create a second user for testing ownership/authorization scenarios."""
+    return await _create_user(
+        db_session,
+        username="seconduser",
+        email="second@example.com",
+        password="SecondPassword123!",
+        roles=DEFAULT_ROLES,
+    )
 
 
 # --- Utility Fixtures ---

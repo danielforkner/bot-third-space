@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: third_space
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Test database (RAM-backed for speed)
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: third_space_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+
+  # API service
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/third_space
+      TEST_DATABASE_URL: postgresql+asyncpg://test:test@test-db:5432/third_space_test
+      SECRET_KEY: dev-secret-key-change-in-production
+      API_KEY_SECRET: dev-api-key-secret-change-in-production
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source code for development (hot reload)
+      - ./api/app:/app/app:ro
+      - ./api/tests:/app/tests:ro
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Test runner service
+  test:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://test:test@test-db:5432/third_space_test
+      TEST_DATABASE_URL: postgresql+asyncpg://test:test@test-db:5432/third_space_test
+      SECRET_KEY: test-secret-key
+      API_KEY_SECRET: test-api-key-secret
+      JWT_SECRET: test-jwt-secret
+    depends_on:
+      test-db:
+        condition: service_healthy
+    volumes:
+      - ./api:/app
+    profiles:
+      - test
+    command: pytest tests/ -v
+
+volumes:
+  postgres_data:
