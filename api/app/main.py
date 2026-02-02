@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 
@@ -49,6 +50,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(admin_router)
 
 
 # --- Exception Handlers ---
@@ -248,24 +250,5 @@ async def list_notifications_stub() -> dict[str, Any]:
     return _not_implemented_response()
 
 
-# --- Admin Router Stubs ---
-
-
-@app.get(
-    "/api/v1/admin/users",
-    tags=["Admin"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def admin_list_users_stub() -> dict[str, Any]:
-    """Stub: Admin list users."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/admin/activity",
-    tags=["Admin"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def admin_activity_log_stub() -> dict[str, Any]:
-    """Stub: Admin activity log."""
-    return _not_implemented_response()
+# Note: Admin endpoints are implemented in routers/admin.py
+# GET /admin/activity is still a stub until activity logging is implemented

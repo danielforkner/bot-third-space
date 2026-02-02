@@ -108,3 +108,29 @@ async def get_api_key_scopes(
     """
     _, api_key = auth
     return set(api_key.scopes or [])
+
+
+async def require_admin(
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> tuple[User, APIKey]:
+    """
+    Require the authenticated user to have admin role.
+
+    Raises:
+        HTTPException: 403 if user doesn't have admin role
+    """
+    user, api_key = auth
+    user_roles = {role.role for role in user.roles}
+
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Admin access required",
+                }
+            },
+        )
+
+    return user, api_key
