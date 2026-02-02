@@ -2,6 +2,7 @@
 
 from app.models.article import Article, ArticleRevision
 from app.models.bulletin import BulletinComment, BulletinFollow, BulletinPost
+from app.models.notification import Notification
 from app.models.user import APIKey, User, UserRole
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "BulletinPost",
     "BulletinComment",
     "BulletinFollow",
+    "Notification",
 ]

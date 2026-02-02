@@ -15,6 +15,7 @@ from app.config import settings
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.bulletin import router as bulletin_router
+from app.routers.inbox import router as inbox_router
 from app.routers.library import router as library_router
 from app.routers.users import router as users_router
 
@@ -55,6 +56,7 @@ app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(library_router)
 app.include_router(bulletin_router)
+app.include_router(inbox_router)
 
 
 # --- Exception Handlers ---
@@ -97,47 +99,3 @@ async def get_skill() -> dict[str, str]:
     Placeholder - returns stub until SKILL.md is created.
     """
     return {"content": "# Third-Space API\n\nSKILL.md content will be here."}
-
-
-# --- Auth Router Stubs ---
-# These return 501 Not Implemented until actual implementation
-
-
-def _not_implemented_response() -> dict[str, Any]:
-    """Standard not implemented response."""
-    return {"error": {"code": "NOT_IMPLEMENTED", "message": "Endpoint not yet implemented"}}
-
-
-# Note: Auth endpoints are implemented in routers/auth.py
-# Note: /users/me is implemented in routers/users.py
-
-
-# Note: Bulletin endpoints are implemented in routers/bulletin.py
-# Note: User endpoints are implemented in routers/users.py
-
-
-# --- Inbox Router Stubs ---
-
-
-@app.get(
-    "/api/v1/inbox/summary",
-    tags=["Inbox"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def inbox_summary_stub() -> dict[str, Any]:
-    """Stub: Get inbox summary."""
-    return _not_implemented_response()
-
-
-@app.get(
-    "/api/v1/inbox/notifications",
-    tags=["Inbox"],
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-)
-async def list_notifications_stub() -> dict[str, Any]:
-    """Stub: List notifications."""
-    return _not_implemented_response()
-
-
-# Note: Admin endpoints are implemented in routers/admin.py
-# GET /admin/activity is still a stub until activity logging is implemented
