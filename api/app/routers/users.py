@@ -1,13 +1,20 @@
 """Users router for user profile endpoints."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
+from app.models.profile import Profile
 from app.models.user import APIKey, User
 from app.schemas.users import (
+    ProfileContentResponse,
+    UpdateProfileContentRequest,
+    UpdateProfileContentResponse,
     UpdateProfileRequest,
     UpdateProfileResponse,
     UserMeResponse,
@@ -109,4 +116,100 @@ async def get_user_profile(
         username=user.username,
         display_name=user.display_name,
         created_at=user.created_at.isoformat(),
+    )
+
+
+@router.get(
+    "/me/profile/content",
+    response_model=ProfileContentResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_profile_content(
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> ProfileContentResponse:
+    """
+    Get the authenticated user's profile content (bio).
+
+    Returns the markdown content of the user's profile.
+    """
+    user, _ = auth
+
+    # Load profile with user
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == user.id)
+    )
+    user = result.scalar_one()
+
+    content_md = ""
+    updated_at = None
+    if user.profile:
+        content_md = user.profile.content_md or ""
+        updated_at = user.profile.updated_at.isoformat() if user.profile.updated_at else None
+
+    return ProfileContentResponse(
+        user_id=str(user.id),
+        username=user.username,
+        content_md=content_md,
+        updated_at=updated_at,
+    )
+
+
+@router.patch(
+    "/me/profile/content",
+    response_model=UpdateProfileContentResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def update_profile_content(
+    data: UpdateProfileContentRequest,
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> UpdateProfileContentResponse:
+    """
+    Update the authenticated user's profile content (bio).
+
+    Creates a profile if one doesn't exist.
+    """
+    user, _ = auth
+
+    # Load profile with user
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == user.id)
+    )
+    user = result.scalar_one()
+
+    now = datetime.now(timezone.utc)
+
+    if user.profile:
+        # Update existing profile
+        user.profile.content_md = data.content_md
+        user.profile.updated_at = now
+    else:
+        # Create new profile
+        profile = Profile(
+            user_id=user.id,
+            content_md=data.content_md,
+            updated_at=now,
+        )
+        db.add(profile)
+
+    await db.commit()
+
+    # Refresh to get updated data
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == user.id)
+    )
+    user = result.scalar_one()
+
+    return UpdateProfileContentResponse(
+        user_id=str(user.id),
+        username=user.username,
+        content_md=user.profile.content_md,
+        updated_at=user.profile.updated_at.isoformat(),
     )

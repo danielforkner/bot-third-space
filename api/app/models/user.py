@@ -30,6 +30,12 @@ class User(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("NOW()"))
     last_seen_at = Column(TIMESTAMP(timezone=True))
 
+    # Lockout tracking (auth_state fields embedded in users table)
+    failed_login_count = Column(Integer, server_default=text("0"))
+    last_failed_at = Column(TIMESTAMP(timezone=True))
+    locked_until = Column(TIMESTAMP(timezone=True))
+    last_successful_at = Column(TIMESTAMP(timezone=True))
+
     __table_args__ = (
         CheckConstraint("username ~ '^[a-z0-9_]{3,32}$'", name="ck_username_format"),
     )
@@ -41,6 +47,7 @@ class User(Base):
         foreign_keys="UserRole.user_id",
     )
     api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
+    profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class UserRole(Base):

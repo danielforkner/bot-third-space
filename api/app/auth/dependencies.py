@@ -1,13 +1,21 @@
 """Authentication dependencies for FastAPI endpoints."""
 
+import asyncio
+import hmac
+from datetime import datetime, timezone
+from uuid import UUID
+
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.api_key import hash_api_key
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.models.user import APIKey, User, UserRole
+
+# Minimum interval between last_used_at updates to reduce write amplification
+LAST_USED_UPDATE_INTERVAL_SECONDS = 300  # 5 minutes
 
 
 async def get_current_user(
@@ -58,6 +66,10 @@ async def get_current_user(
     api_key = result.scalar_one_or_none()
 
     if not api_key:
+        # Constant-time comparison to prevent timing attacks
+        # Even though the key wasn't found, we still perform a comparison
+        # to ensure consistent response time regardless of key validity
+        hmac.compare_digest(key_hash, "0" * 64)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -69,10 +81,9 @@ async def get_current_user(
         )
 
     # Check expiration if set
+    now = datetime.now(timezone.utc)
     if api_key.expires_at is not None:
-        from datetime import datetime, timezone
-
-        if api_key.expires_at < datetime.now(timezone.utc):
+        if api_key.expires_at < now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
@@ -83,7 +94,30 @@ async def get_current_user(
                 },
             )
 
+    # Sampled last_used_at update to reduce write amplification
+    # Only update if more than 5 minutes since last update
+    if api_key.last_used_at is None or (
+        now - api_key.last_used_at.replace(tzinfo=timezone.utc)
+    ).total_seconds() > LAST_USED_UPDATE_INTERVAL_SECONDS:
+        # Fire-and-forget background update with its own session
+        asyncio.create_task(_update_last_used_at(api_key.id))
+
     return api_key.user, api_key
+
+
+async def _update_last_used_at(api_key_id: UUID) -> None:
+    """Background task to update last_used_at timestamp with its own session."""
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                update(APIKey)
+                .where(APIKey.id == api_key_id)
+                .values(last_used_at=datetime.now(timezone.utc))
+            )
+            await session.commit()
+    except Exception:
+        # Silently fail - this is a non-critical update
+        pass
 
 
 async def get_current_user_roles(

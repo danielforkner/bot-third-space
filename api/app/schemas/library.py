@@ -143,3 +143,37 @@ class BatchReadResponse(BaseModel):
 
     items: list[ArticleResponse]
     missing: list[str]  # Slugs that were not found
+
+
+class RevisionListItem(BaseModel):
+    """Revision summary for list endpoint."""
+
+    version: int
+    title: str
+    editor: str | None
+    editor_id: str | None
+    edit_summary: str | None
+    created_at: str
+    byte_size: int
+
+
+class RevisionResponse(BaseModel):
+    """Full revision response with content."""
+
+    id: str
+    article_id: str
+    version: int
+    title: str
+    content_md: str
+    editor: str | None
+    editor_id: str | None
+    edit_summary: str | None
+    created_at: str
+
+
+class ListRevisionsResponse(BaseModel):
+    """Response for listing article revisions."""
+
+    items: list[RevisionListItem]
+    article_slug: str
+    current_version: int

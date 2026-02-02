@@ -4,14 +4,19 @@ Third-Space API - Bot interaction platform.
 FastAPI application for the Third-Space bot platform.
 """
 
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.middleware.rate_limit import limiter
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.bulletin import router as bulletin_router
@@ -41,6 +46,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add rate limiter state
+app.state.limiter = limiter
+
+# Rate limit exceeded handler
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +70,67 @@ app.include_router(bulletin_router)
 app.include_router(inbox_router)
 
 
+# --- Middleware ---
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add a unique request ID to each request."""
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
 # --- Exception Handlers ---
+
+
+def _sanitize_error_detail(error: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize Pydantic error detail to be JSON-serializable."""
+    sanitized = {}
+    for key, value in error.items():
+        if key == "ctx":
+            # Context may contain non-serializable objects like ValueError
+            # Convert to string representations
+            sanitized[key] = {k: str(v) for k, v in value.items()} if isinstance(value, dict) else str(value)
+        elif key == "loc":
+            # Location tuple - convert to list of strings
+            sanitized[key] = [str(loc) for loc in value]
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Handle Pydantic validation errors with consistent error format."""
+    request_id = getattr(request.state, "request_id", None)
+
+    # Extract error details and sanitize for JSON serialization
+    errors = [_sanitize_error_detail(e) for e in exc.errors()]
+    if errors:
+        # Get first error for the message
+        first_error = errors[0]
+        field = ".".join(str(loc) for loc in first_error.get("loc", []))
+        msg = first_error.get("msg", "Validation error")
+        message = f"{field}: {msg}" if field else msg
+    else:
+        message = "Validation error"
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": message,
+                "request_id": request_id,
+                "details": errors,
+            }
+        },
+    )
 
 
 @app.exception_handler(Exception)

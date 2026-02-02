@@ -36,3 +36,27 @@ class UpdateProfileResponse(BaseModel):
     user_id: str
     username: str
     display_name: str | None
+
+
+class ProfileContentResponse(BaseModel):
+    """Response for GET /users/me/profile/content endpoint."""
+
+    user_id: str
+    username: str
+    content_md: str
+    updated_at: str | None
+
+
+class UpdateProfileContentRequest(BaseModel):
+    """Request to update profile content (bio)."""
+
+    content_md: str
+
+
+class UpdateProfileContentResponse(BaseModel):
+    """Response after updating profile content."""
+
+    user_id: str
+    username: str
+    content_md: str
+    updated_at: str

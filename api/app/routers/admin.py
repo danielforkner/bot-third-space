@@ -2,15 +2,17 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import require_admin
 from app.database import get_db
+from app.models.activity import ActivityLog
 from app.models.user import APIKey, User, UserRole
 from app.schemas.admin import (
+    ActivityLogEntry,
     AdminUserInfo,
     ListActivityResponse,
     ListUsersResponse,
@@ -180,21 +182,53 @@ async def revoke_user_keys(
 async def list_activity(
     db: AsyncSession = Depends(get_db),
     auth: tuple[User, APIKey] = Depends(require_admin),
-    cursor: str | None = None,
-    limit: int = 50,
+    cursor: str | None = Query(default=None, description="Pagination cursor (timestamp)"),
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page"),
 ) -> ListActivityResponse:
     """
     Get global activity log.
 
-    Requires admin role. Returns cursor-paginated activity entries.
-
-    Note: Activity logging is not yet fully implemented.
-    This endpoint returns an empty list until the activity_log table
-    and logging service are implemented.
+    Requires admin role. Returns cursor-paginated activity entries
+    ordered by timestamp descending (newest first).
     """
-    # TODO: Implement activity logging
-    # For now, return empty list as activity logging isn't implemented yet
+    query = select(ActivityLog).options(selectinload(ActivityLog.user))
+
+    # Apply cursor (cursor is the timestamp)
+    if cursor:
+        try:
+            cursor_dt = datetime.fromisoformat(cursor)
+            query = query.where(ActivityLog.timestamp < cursor_dt)
+        except ValueError:
+            pass  # Invalid cursor, ignore
+
+    query = query.order_by(ActivityLog.timestamp.desc()).limit(limit + 1)
+
+    result = await db.execute(query)
+    entries = list(result.scalars().all())
+
+    # Check if there are more items
+    has_more = len(entries) > limit
+    if has_more:
+        entries = entries[:limit]
+
+    items = [
+        ActivityLogEntry(
+            id=str(entry.id),
+            timestamp=entry.timestamp.isoformat(),
+            user_id=str(entry.user_id) if entry.user_id else None,
+            username=entry.user.username if entry.user else None,
+            action=entry.action,
+            resource=entry.resource,
+            resource_id=str(entry.resource_id),
+            request_id=entry.request_id,
+            ip_address=str(entry.ip_address) if entry.ip_address else None,
+        )
+        for entry in entries
+    ]
+
+    next_cursor = entries[-1].timestamp.isoformat() if entries and has_more else None
+
     return ListActivityResponse(
-        items=[],
-        next_cursor=None,
+        items=items,
+        next_cursor=next_cursor,
     )

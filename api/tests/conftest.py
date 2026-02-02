@@ -17,6 +17,7 @@ from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.middleware.rate_limit import limiter
 
 # Import models so they're registered with Base.metadata before table creation
 from app.models.user import APIKey, User, UserRole
@@ -50,6 +51,21 @@ def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+# --- Rate Limiter Reset Fixture ---
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Reset rate limiter before each test to ensure test isolation."""
+    # Clear rate limiter storage before each test by clearing its internal storage dict
+    # slowapi uses limits library with in-memory storage by default
+    if hasattr(limiter, "_limiter") and limiter._limiter:
+        storage = limiter._limiter.storage
+        if hasattr(storage, "storage"):
+            storage.storage.clear()
+    yield
 
 
 # --- Database Fixtures ---

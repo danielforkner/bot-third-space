@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.auth.jwt import create_tokens, decode_token
 from app.auth.password import hash_password, verify_password
 from app.config import settings
 from app.database import get_db
+from app.middleware.rate_limit import limiter
 from app.models.user import APIKey, User, UserRole
 from app.schemas.auth import (
     ApiKeyInfo,
@@ -42,7 +43,9 @@ DEFAULT_ROLES = [
     response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/hour")
 async def register(
+    request: Request,
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
@@ -105,12 +108,18 @@ async def register(
     )
 
 
+LOCKOUT_THRESHOLD = 5  # Number of failed attempts before lockout
+LOCKOUT_DURATION_MINUTES = 15  # Duration of lockout in minutes
+
+
 @router.post(
     "/login",
     response_model=LoginResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("10/15minutes")
 async def login(
+    request: Request,
     data: LoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -143,7 +152,32 @@ async def login(
             },
         )
 
+    # Check if account is locked
+    now = datetime.now(timezone.utc)
+    if user.locked_until and user.locked_until > now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": {
+                    "code": "ACCOUNT_LOCKED",
+                    "message": "Account is temporarily locked due to too many failed login attempts",
+                }
+            },
+        )
+
     if not verify_password(data.password, user.password_hash):
+        # Increment failed login count and record timestamp
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        user.last_failed_at = now
+
+        # Check if we should lock the account
+        if user.failed_login_count >= LOCKOUT_THRESHOLD:
+            from datetime import timedelta
+
+            user.locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+
+        await db.commit()
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -153,6 +187,12 @@ async def login(
                 }
             },
         )
+
+    # Successful login - reset failed count, clear lockout, and record timestamp
+    user.failed_login_count = 0
+    user.locked_until = None
+    user.last_successful_at = now
+    await db.commit()
 
     # Create JWT tokens
     tokens = create_tokens(str(user.id))
@@ -292,7 +332,9 @@ async def refresh(
     response_model=CreateApiKeyResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("10/hour")
 async def create_api_key(
+    request: Request,
     data: CreateApiKeyRequest,
     db: AsyncSession = Depends(get_db),
     auth: tuple[User, APIKey] = Depends(get_current_user),

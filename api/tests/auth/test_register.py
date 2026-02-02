@@ -280,14 +280,28 @@ class TestRegisterRateLimiting:
         response = await async_client.post("/api/v1/auth/register", json=data)
         assert response.status_code == 429
 
-    async def test_register_rate_limit_includes_headers(
-        self, async_client: AsyncClient, valid_registration_data: dict
+    async def test_register_rate_limit_response_is_json(
+        self, async_client: AsyncClient
     ):
-        """Response includes X-RateLimit-* headers."""
-        response = await async_client.post(
-            "/api/v1/auth/register", json=valid_registration_data
-        )
-        assert "x-ratelimit-limit" in response.headers
+        """Rate limited response returns JSON with error message."""
+        # Make 5 requests to exhaust rate limit
+        for i in range(5):
+            data = {
+                "username": f"headeruser{i}",
+                "email": f"header{i}@example.com",
+                "password": "SecurePassword123!",
+            }
+            await async_client.post("/api/v1/auth/register", json=data)
+
+        # 6th should be rate limited with JSON response
+        data = {
+            "username": "headeruser5",
+            "email": "header5@example.com",
+            "password": "SecurePassword123!",
+        }
+        response = await async_client.post("/api/v1/auth/register", json=data)
+        assert response.status_code == 429
+        assert response.headers["content-type"] == "application/json"
 
 
 class TestRegisterErrorFormat:

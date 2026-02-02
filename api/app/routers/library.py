@@ -21,6 +21,9 @@ from app.schemas.library import (
     BatchReadResponse,
     CreateArticleRequest,
     ListArticlesResponse,
+    ListRevisionsResponse,
+    RevisionListItem,
+    RevisionResponse,
     SearchResponse,
     SearchResultItem,
     UpdateArticleRequest,
@@ -323,8 +326,28 @@ async def update_article(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": {
-                    "code": "CONFLICT",
+                    "code": "VERSION_MISMATCH",
                     "message": f"Version mismatch: expected {expected_version}, current is {article.current_version}",
+                    "details": {
+                        "expected_version": expected_version,
+                        "current_version": article.current_version,
+                    },
+                }
+            },
+        )
+
+    # Check ownership: user must be author OR have admin role
+    user_roles = {role.role for role in user.roles}
+    is_author = article.author_id == user.id
+    is_admin = "admin" in user_roles
+
+    if not is_author and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "You can only edit your own articles",
                 }
             },
         )
@@ -387,9 +410,15 @@ async def delete_article(
     """
     Delete an article.
 
-    Requires library:delete scope (typically admin only).
+    Requires library:delete scope AND (author OR admin).
     """
-    result = await db.execute(select(Article).where(Article.slug == slug))
+    user, _ = auth
+
+    result = await db.execute(
+        select(Article)
+        .options(selectinload(Article.author))
+        .where(Article.slug == slug)
+    )
     article = result.scalar_one_or_none()
 
     if not article:
@@ -399,6 +428,22 @@ async def delete_article(
                 "error": {
                     "code": "NOT_FOUND",
                     "message": f"Article '{slug}' not found",
+                }
+            },
+        )
+
+    # Check ownership: user must be author OR have admin role
+    user_roles = {role.role for role in user.roles}
+    is_author = article.author_id == user.id
+    is_admin = "admin" in user_roles
+
+    if not is_author and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "You can only delete your own articles",
                 }
             },
         )
@@ -515,3 +560,127 @@ async def batch_read_articles(
             missing.append(slug)
 
     return BatchReadResponse(items=items, missing=missing)
+
+
+# --- Revision History ---
+
+
+@router.get(
+    "/articles/{slug}/revisions",
+    response_model=ListRevisionsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def list_revisions(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> ListRevisionsResponse:
+    """
+    List all revisions of an article.
+
+    Returns revisions ordered by version descending (newest first).
+    """
+    # Fetch article
+    result = await db.execute(select(Article).where(Article.slug == slug))
+    article = result.scalar_one_or_none()
+
+    if not article:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Article '{slug}' not found",
+                }
+            },
+        )
+
+    # Fetch revisions
+    result = await db.execute(
+        select(ArticleRevision)
+        .options(selectinload(ArticleRevision.editor))
+        .where(ArticleRevision.article_id == article.id)
+        .order_by(ArticleRevision.version.desc())
+    )
+    revisions = list(result.scalars().all())
+
+    items = [
+        RevisionListItem(
+            version=rev.version,
+            title=rev.title,
+            editor=rev.editor.display_name or rev.editor.username if rev.editor else None,
+            editor_id=str(rev.editor_id) if rev.editor_id else None,
+            edit_summary=rev.edit_summary,
+            created_at=rev.created_at.isoformat(),
+            byte_size=len(rev.content_md.encode("utf-8")) if rev.content_md else 0,
+        )
+        for rev in revisions
+    ]
+
+    return ListRevisionsResponse(
+        items=items,
+        article_slug=slug,
+        current_version=article.current_version,
+    )
+
+
+@router.get(
+    "/articles/{slug}/revisions/{version}",
+    response_model=RevisionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_revision(
+    slug: str,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+    auth: tuple[User, APIKey] = Depends(get_current_user),
+) -> RevisionResponse:
+    """
+    Get a specific revision of an article by version number.
+    """
+    # Fetch article
+    result = await db.execute(select(Article).where(Article.slug == slug))
+    article = result.scalar_one_or_none()
+
+    if not article:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Article '{slug}' not found",
+                }
+            },
+        )
+
+    # Fetch specific revision
+    result = await db.execute(
+        select(ArticleRevision)
+        .options(selectinload(ArticleRevision.editor))
+        .where(ArticleRevision.article_id == article.id)
+        .where(ArticleRevision.version == version)
+    )
+    revision = result.scalar_one_or_none()
+
+    if not revision:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Revision {version} not found for article '{slug}'",
+                }
+            },
+        )
+
+    return RevisionResponse(
+        id=str(revision.id),
+        article_id=str(revision.article_id),
+        version=revision.version,
+        title=revision.title,
+        content_md=revision.content_md,
+        editor=revision.editor.display_name or revision.editor.username if revision.editor else None,
+        editor_id=str(revision.editor_id) if revision.editor_id else None,
+        edit_summary=revision.edit_summary,
+        created_at=revision.created_at.isoformat(),
+    )
