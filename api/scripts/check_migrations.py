@@ -16,7 +16,7 @@ from app import models  # noqa: F401  # Ensure models are registered
 
 
 def _compare(connection) -> list[object]:
-    context = MigrationContext.configure(connection, compare_type=True)
+    context = MigrationContext.configure(connection, opts={"compare_type": True})
     return compare_metadata(context, Base.metadata)
 
 
