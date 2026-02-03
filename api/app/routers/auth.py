@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.api_key import generate_api_key, get_key_prefix
@@ -94,7 +95,20 @@ async def register(
     )
     db.add(api_key)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "CONFLICT",
+                    "message": "Username or email already exists",
+                }
+            },
+        )
+
     await db.refresh(user)
 
     return RegisterResponse(
@@ -154,6 +168,10 @@ async def login(
 
     # Check if account is locked
     now = datetime.now(timezone.utc)
+    if user.locked_until and user.locked_until <= now:
+        user.locked_until = None
+        user.failed_login_count = 0
+
     if user.locked_until and user.locked_until > now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

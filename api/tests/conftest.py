@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.config import settings
-from app.database import Base, get_db
+from app.database import get_db, init_db, migrate_db
 from app.main import app
 from app.middleware.rate_limit import limiter
 
@@ -77,15 +77,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     Create tables before each test function, drop after.
     Provides isolated database state per test.
     """
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await init_db(TEST_DATABASE_URL)
 
     async with TestSessionLocal() as session:
         yield session
         await session.rollback()
 
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    await migrate_db("base", TEST_DATABASE_URL)
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -16,6 +16,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.database import init_db
 from app.middleware.rate_limit import limiter
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
@@ -31,11 +32,8 @@ from app.models import APIKey, User, UserRole  # noqa: F401
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Application lifespan handler for startup/shutdown."""
-    # Startup: Create tables if they don't exist
-    from app.database import Base, engine
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Startup: Ensure extensions and create tables if they don't exist
+    await init_db()
     yield
     # Shutdown
 
