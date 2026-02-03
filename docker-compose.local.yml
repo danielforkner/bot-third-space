@@ -56,6 +56,7 @@ services:
       # Mount source code for development (hot reload)
       - ./api/app:/app/app:ro
       - ./api/tests:/app/tests:ro
+      - ./SKILL.md:/app/SKILL.md:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Test runner service

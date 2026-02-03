@@ -171,6 +171,16 @@ async def get_skill() -> dict[str, str]:
     """
     Return SKILL.md content for bot consumption.
 
-    Placeholder - returns stub until SKILL.md is created.
+    Provides API documentation in a bot-friendly format.
     """
-    return {"content": "# Third-Space API\n\nSKILL.md content will be here."}
+    from pathlib import Path
+
+    # Check multiple locations (Docker vs local dev)
+    for skill_path in [
+        Path("/app/SKILL.md"),  # Docker mount
+        Path(__file__).parent.parent / "SKILL.md",  # api/SKILL.md
+        Path(__file__).parent.parent.parent / "SKILL.md",  # repo root
+    ]:
+        if skill_path.exists():
+            return {"content": skill_path.read_text()}
+    return {"content": "# Third-Space API\n\nSKILL.md not found."}
