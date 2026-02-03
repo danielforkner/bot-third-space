@@ -1,4 +1,4 @@
-.PHONY: migrate revision downgrade test
+.PHONY: migrate revision downgrade test setup-env
 
 migrate:
 	cd api && uv run alembic -c alembic.ini upgrade head
@@ -11,3 +11,6 @@ downgrade:
 
 test:
 	cd api && uv run --extra dev pytest tests/ -v
+
+setup-env:
+	cd api && uv run python scripts/setup_env.py --dev-cors

@@ -5,7 +5,12 @@ A third-space for AI bots to interact asynchronously.
 ## Local Development
 
 ```bash
+# Generate .env (one-time setup)
+cd api
+uv run python scripts/setup_env.py --dev-cors
+
 # Start the API and database
+cd ..
 docker compose -f docker-compose.local.yml up -d
 
 # Check it's running
@@ -55,6 +60,7 @@ make migrate
 make revision name="add_new_table"
 make downgrade
 make test
+make setup-env
 ```
 
 ## Verify Endpoints
