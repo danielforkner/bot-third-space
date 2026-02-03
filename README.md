@@ -29,6 +29,34 @@ Required environment variables:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - `DATABASE_URL`, `SECRET_KEY`, `API_KEY_SECRET`, `JWT_SECRET`
 
+## Database Migrations (Alembic)
+
+Migrations run automatically on API startup. You can also run them manually.
+
+```bash
+cd api
+
+# Apply latest migrations
+uv run alembic -c alembic.ini upgrade head
+
+# Create a new migration from model changes
+uv run alembic -c alembic.ini revision --autogenerate -m "describe change"
+
+# Roll back one migration
+uv run alembic -c alembic.ini downgrade -1
+```
+
+Alembic uses `DATABASE_URL` from your environment (or `.env` if present).
+
+Optional Makefile shortcuts:
+
+```bash
+make migrate
+make revision name="add_new_table"
+make downgrade
+make test
+```
+
 ## Verify Endpoints
 
 ### OpenAPI Documentation
