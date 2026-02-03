@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -63,6 +63,8 @@ def generate_slug(title: str) -> str:
     base = re.sub(r"[^a-z0-9]+", "-", title.lower())
     # Remove leading/trailing hyphens
     base = base.strip("-")
+    if not base:
+        base = "article"
     # Truncate to leave room for suffix
     base = base[:100] if len(base) > 100 else base
     # Add random suffix for uniqueness
@@ -80,7 +82,7 @@ def generate_slug(title: str) -> str:
 )
 async def list_articles(
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
     cursor: str | None = Query(default=None, description="Pagination cursor"),
     limit: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ) -> ListArticlesResponse:
@@ -221,11 +223,14 @@ async def create_article(
 async def get_article(
     slug: str,
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
 ) -> ArticleResponse:
     """Get a single article by slug."""
     result = await db.execute(
-        select(Article).options(selectinload(Article.author)).where(Article.slug == slug)
+        select(Article)
+        .options(selectinload(Article.author))
+        .where(Article.slug == slug)
+        .with_for_update()
     )
     article = result.scalar_one_or_none()
 
@@ -372,7 +377,19 @@ async def update_article(
     article.current_version += 1
     article.updated_at = datetime.now(timezone.utc)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "VERSION_MISMATCH",
+                    "message": "Article was updated concurrently, please retry with latest version",
+                }
+            },
+        )
 
     # Re-fetch the article to get computed columns
     result = await db.execute(
@@ -463,7 +480,7 @@ async def delete_article(
 async def search_articles(
     q: str = Query(..., min_length=1, description="Search query"),
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
     limit: int = Query(default=20, ge=1, le=100, description="Max results"),
 ) -> SearchResponse:
     """
@@ -471,32 +488,38 @@ async def search_articles(
 
     Searches title and content using PostgreSQL full-text search.
     """
-    # Use plainto_tsquery for simple search
-    # This converts plain text to a tsquery
-    search_query = func.plainto_tsquery("english", q)
+    ts_query = func.plainto_tsquery("english", q)
+    rank_expr = func.ts_rank(Article.tsv, ts_query)
+    headline_expr = func.ts_headline(
+        "english",
+        Article.content_md,
+        ts_query,
+        "StartSel=<mark>, StopSel=</mark>, MaxWords=40, MinWords=15, MaxFragments=2",
+    )
 
-    # Build query with ranking
-    # Note: Since tsv might not be populated, fall back to ILIKE search
     result = await db.execute(
-        select(Article)
-        .where(
-            (Article.title.ilike(f"%{q}%")) | (Article.content_md.ilike(f"%{q}%"))
-        )
-        .order_by(Article.updated_at.desc())
+        select(Article, rank_expr.label("rank"), headline_expr.label("headline"))
+        .where(Article.tsv.op("@@")(ts_query))
+        .order_by(rank_expr.desc(), Article.updated_at.desc())
         .limit(limit)
     )
-    articles = list(result.scalars().all())
+    rows = list(result.all())
 
     items = [
         SearchResultItem(
             slug=article.slug,
             title=article.title,
-            snippet=article.content_md[:200] + "..." if len(article.content_md) > 200 else article.content_md,
-            rank=None,  # Would be ts_rank if using tsvector
+            snippet=headline
+            or (
+                article.content_md[:200] + "..."
+                if len(article.content_md) > 200
+                else article.content_md
+            ),
+            rank=float(rank) if rank is not None else None,
             byte_size=article.byte_size or 0,
             token_count_est=article.token_count_est or 0,
         )
-        for article in articles
+        for article, rank, headline in rows
     ]
 
     return SearchResponse(
@@ -516,7 +539,7 @@ async def search_articles(
 async def batch_read_articles(
     data: BatchReadRequest,
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
 ) -> BatchReadResponse:
     """
     Read multiple articles by slug in a single request.
@@ -573,7 +596,7 @@ async def batch_read_articles(
 async def list_revisions(
     slug: str,
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
 ) -> ListRevisionsResponse:
     """
     List all revisions of an article.
@@ -633,7 +656,7 @@ async def get_revision(
     slug: str,
     version: int,
     db: AsyncSession = Depends(get_db),
-    auth: tuple[User, APIKey] = Depends(get_current_user),
+    _auth: tuple[User, APIKey] = Depends(require_scope("library:read")),
 ) -> RevisionResponse:
     """
     Get a specific revision of an article by version number.

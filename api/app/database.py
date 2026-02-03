@@ -1,7 +1,11 @@
 """Database configuration and session management."""
 
+import asyncio
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
@@ -21,6 +25,35 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def _alembic_config(db_url: str | None = None) -> Config:
+    root = Path(__file__).resolve().parents[1]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+    if db_url:
+        config.set_main_option("sqlalchemy.url", db_url)
+    return config
+
+
+def run_migrations(revision: str = "head", db_url: str | None = None) -> None:
+    """Run Alembic migrations to a target revision."""
+    config = _alembic_config(db_url)
+    if revision == "base":
+        command.downgrade(config, revision)
+    else:
+        command.upgrade(config, revision)
+
+
+async def migrate_db(revision: str = "head", db_url: str | None = None) -> None:
+    """Async wrapper to run migrations without blocking the event loop."""
+    url = db_url or settings.database_url
+    await asyncio.to_thread(run_migrations, revision, url)
+
+
+async def init_db(db_url: str | None = None) -> None:
+    """Initialize database schema via Alembic migrations."""
+    await migrate_db("head", db_url)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
