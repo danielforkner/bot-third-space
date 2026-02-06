@@ -1,8 +1,8 @@
 """Library router for article CRUD, search, and batch operations."""
 
+import datetime as dt
 import re
 import secrets
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_effective_scopes
 from app.database import get_db
 from app.models.article import Article, ArticleRevision
 from app.models.user import APIKey, User
@@ -39,7 +39,7 @@ def require_scope(required_scope: str):
         auth: tuple[User, APIKey] = Depends(get_current_user),
     ) -> tuple[User, APIKey]:
         user, api_key = auth
-        scopes = set(api_key.scopes or [])
+        scopes = get_effective_scopes(user, api_key)
 
         if required_scope not in scopes:
             raise HTTPException(
@@ -96,7 +96,7 @@ async def list_articles(
     # Apply cursor (cursor is the updated_at timestamp)
     if cursor:
         try:
-            cursor_dt = datetime.fromisoformat(cursor)
+            cursor_dt = dt.datetime.fromisoformat(cursor)
             query = query.where(Article.updated_at < cursor_dt)
         except ValueError:
             pass  # Invalid cursor, ignore
@@ -182,7 +182,7 @@ async def create_article(
     try:
         await db.commit()
         await db.refresh(article)
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -192,7 +192,7 @@ async def create_article(
                     "message": "Article with this slug already exists",
                 }
             },
-        )
+        ) from exc
 
     # Load author relationship
     await db.refresh(article, ["author"])
@@ -230,7 +230,6 @@ async def get_article(
         select(Article)
         .options(selectinload(Article.author))
         .where(Article.slug == slug)
-        .with_for_update()
     )
     article = result.scalar_one_or_none()
 
@@ -297,7 +296,7 @@ async def update_article(
     # Parse version from If-Match
     try:
         expected_version = int(if_match)
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -306,7 +305,7 @@ async def update_article(
                     "message": "If-Match header must be a version number",
                 }
             },
-        )
+        ) from exc
 
     # Fetch article
     result = await db.execute(
@@ -375,11 +374,11 @@ async def update_article(
         article.content_md = data.content_md
 
     article.current_version += 1
-    article.updated_at = datetime.now(timezone.utc)
+    article.updated_at = dt.datetime.now(dt.UTC)
 
     try:
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -389,7 +388,7 @@ async def update_article(
                     "message": "Article was updated concurrently, please retry with latest version",
                 }
             },
-        )
+        ) from exc
 
     # Re-fetch the article to get computed columns
     result = await db.execute(

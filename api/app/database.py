@@ -4,11 +4,11 @@ import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
+from alembic.command import downgrade, upgrade
+from alembic.config import Config
 from app.config import settings
 
 engine = create_async_engine(
@@ -40,9 +40,9 @@ def run_migrations(revision: str = "head", db_url: str | None = None) -> None:
     """Run Alembic migrations to a target revision."""
     config = _alembic_config(db_url)
     if revision == "base":
-        command.downgrade(config, revision)
+        downgrade(config, revision)
     else:
-        command.upgrade(config, revision)
+        upgrade(config, revision)
 
 
 async def migrate_db(revision: str = "head", db_url: str | None = None) -> None:
