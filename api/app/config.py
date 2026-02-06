@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-in-production"
     api_key_secret: str = "dev-api-key-secret-change-in-production"
     jwt_secret: str = "dev-jwt-secret-change-in-production"
+    environment: str = "development"
 
     # JWT settings
     access_token_expire_minutes: int = 15
@@ -51,3 +52,24 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def validate_security_settings() -> None:
+    """Ensure insecure defaults are never used in production-like environments."""
+    if settings.environment.lower() not in {"production", "prod"}:
+        return
+
+    insecure = []
+    if settings.secret_key == "dev-secret-key-change-in-production":
+        insecure.append("SECRET_KEY")
+    if settings.api_key_secret == "dev-api-key-secret-change-in-production":
+        insecure.append("API_KEY_SECRET")
+    if settings.jwt_secret == "dev-jwt-secret-change-in-production":
+        insecure.append("JWT_SECRET")
+
+    if insecure:
+        insecure_list = ", ".join(insecure)
+        raise RuntimeError(
+            f"Insecure default secrets are configured for production: {insecure_list}. "
+            "Set strong values in the environment before starting the API."
+        )

@@ -1,7 +1,9 @@
 """Authentication dependencies for FastAPI endpoints."""
 
+import datetime as dt
 import hmac
-from datetime import datetime, timezone
+import re
+
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +11,11 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.api_key import hash_api_key
 from app.database import get_db
-from app.models.user import APIKey, User, UserRole
+from app.models.user import APIKey, User
 
 # Minimum interval between last_used_at updates to reduce write amplification
 LAST_USED_UPDATE_INTERVAL_SECONDS = 300  # 5 minutes
+API_KEY_PATTERN = re.compile(r"^ts_live_[0-9a-f]{64}$")
 
 
 async def get_current_user(
@@ -40,7 +43,7 @@ async def get_current_user(
         )
 
     # Validate key format
-    if not x_api_key.startswith("ts_live_"):
+    if not API_KEY_PATTERN.fullmatch(x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -78,7 +81,7 @@ async def get_current_user(
         )
 
     # Check expiration if set
-    now = datetime.now(timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     if api_key.expires_at is not None:
         if api_key.expires_at < now:
             raise HTTPException(
@@ -98,14 +101,21 @@ async def get_current_user(
         api_key.last_used_at = now
     else:
         last_used_utc = (
-            last_used_at.astimezone(timezone.utc)
+            last_used_at.astimezone(dt.UTC)
             if last_used_at.tzinfo is not None
-            else last_used_at.replace(tzinfo=timezone.utc)
+            else last_used_at.replace(tzinfo=dt.UTC)
         )
         if (now - last_used_utc).total_seconds() > LAST_USED_UPDATE_INTERVAL_SECONDS:
             api_key.last_used_at = now
 
     return api_key.user, api_key
+
+
+def get_effective_scopes(user: User, api_key: APIKey) -> set[str]:
+    """Compute effective scopes as intersection of key scopes and current user roles."""
+    user_roles = {role.role for role in user.roles}
+    key_scopes = set(api_key.scopes or [])
+    return key_scopes & user_roles
 
 
 async def get_current_user_roles(
@@ -126,10 +136,10 @@ async def get_api_key_scopes(
     """
     Get the set of scopes for the current API key.
 
-    API key scopes are always a subset of user roles.
+    Returns effective scopes (API key scopes intersected with current user roles).
     """
-    _, api_key = auth
-    return set(api_key.scopes or [])
+    user, api_key = auth
+    return get_effective_scopes(user, api_key)
 
 
 async def require_admin(
@@ -143,14 +153,15 @@ async def require_admin(
     """
     user, api_key = auth
     user_roles = {role.role for role in user.roles}
+    effective_scopes = get_effective_scopes(user, api_key)
 
-    if "admin" not in user_roles:
+    if "admin" not in user_roles or "admin" not in effective_scopes:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "error": {
                     "code": "FORBIDDEN",
-                    "message": "Admin access required",
+                    "message": "Admin role and scope required",
                 }
             },
         )

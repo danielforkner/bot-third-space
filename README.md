@@ -32,6 +32,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 Required environment variables:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `ENVIRONMENT` (set to `production` in production deployments)
 - `DATABASE_URL`, `SECRET_KEY`, `API_KEY_SECRET`, `JWT_SECRET`
 
 ## Database Migrations (Alembic)
