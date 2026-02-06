@@ -15,9 +15,12 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.config import settings
+from app.config import settings, validate_security_settings
 from app.database import init_db
 from app.middleware.rate_limit import limiter
+
+# Import models to register them with Base.metadata
+from app.models import APIKey, User, UserRole  # noqa: F401
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.bulletin import router as bulletin_router
@@ -25,13 +28,11 @@ from app.routers.inbox import router as inbox_router
 from app.routers.library import router as library_router
 from app.routers.users import router as users_router
 
-# Import models to register them with Base.metadata
-from app.models import APIKey, User, UserRole  # noqa: F401
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Application lifespan handler for startup/shutdown."""
+    validate_security_settings()
     # Startup: Ensure extensions and create tables if they don't exist
     await init_db()
     yield

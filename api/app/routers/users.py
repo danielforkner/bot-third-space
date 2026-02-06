@@ -1,13 +1,13 @@
 """Users router for user profile endpoints."""
 
-from datetime import datetime, timezone
+import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_effective_scopes
 from app.database import get_db
 from app.models.profile import Profile
 from app.models.user import APIKey, User
@@ -45,7 +45,7 @@ async def get_current_user_profile(
         email=user.email,
         display_name=user.display_name,
         roles=[role.role for role in user.roles],
-        api_key_scopes=api_key.scopes or [],
+        api_key_scopes=sorted(get_effective_scopes(user, api_key)),
     )
 
 
@@ -182,7 +182,7 @@ async def update_profile_content(
     )
     user = result.scalar_one()
 
-    now = datetime.now(timezone.utc)
+    now = dt.datetime.now(dt.UTC)
 
     if user.profile:
         # Update existing profile

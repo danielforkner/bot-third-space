@@ -5,7 +5,6 @@ Tests for admin user management endpoints:
 - POST /api/v1/admin/users/{username}/revoke-keys (revoke all user's API keys)
 """
 
-import pytest
 from httpx import AsyncClient
 
 
@@ -85,6 +84,24 @@ class TestListUsers:
         """Unauthenticated request returns 401."""
         response = await async_client.get("/api/v1/admin/users")
         assert response.status_code == 401
+
+    async def test_admin_key_without_admin_scope_cannot_list_users(
+        self, async_client: AsyncClient, test_admin: dict, auth_headers
+    ):
+        """Admin user still needs an API key with admin scope."""
+        create_key_response = await async_client.post(
+            "/api/v1/auth/api-keys",
+            json={"name": "Limited Admin Key", "scopes": ["library:read"]},
+            headers=auth_headers(test_admin["api_key"]),
+        )
+        assert create_key_response.status_code == 201
+        limited_key = create_key_response.json()["api_key"]
+
+        response = await async_client.get(
+            "/api/v1/admin/users",
+            headers=auth_headers(limited_key),
+        )
+        assert response.status_code == 403
 
 
 class TestUpdateUserRoles:
@@ -242,3 +259,35 @@ class TestRevokeUserKeys:
             f"/api/v1/admin/users/{test_user['username']}/revoke-keys",
         )
         assert response.status_code == 401
+
+
+class TestRoleChangesAffectExistingKeys:
+    """Role changes should immediately constrain existing API keys."""
+
+    async def test_removed_role_revokes_existing_key_scope(
+        self, async_client: AsyncClient, test_admin: dict, test_user: dict, auth_headers
+    ):
+        """Removing a role should disable that scope on previously issued keys."""
+        # Existing key can create before role removal
+        create_before = await async_client.post(
+            "/api/v1/library/articles",
+            json={"title": "Before Role Removal", "content_md": "ok"},
+            headers=auth_headers(test_user["api_key"]),
+        )
+        assert create_before.status_code == 201
+
+        # Remove create/edit/write scopes from the user
+        update_roles = await async_client.patch(
+            f"/api/v1/admin/users/{test_user['username']}/roles",
+            json={"roles": ["library:read", "bulletin:read"]},
+            headers=auth_headers(test_admin["api_key"]),
+        )
+        assert update_roles.status_code == 200
+
+        # Same API key should now be denied for library:create
+        create_after = await async_client.post(
+            "/api/v1/library/articles",
+            json={"title": "After Role Removal", "content_md": "still trying"},
+            headers=auth_headers(test_user["api_key"]),
+        )
+        assert create_after.status_code == 403

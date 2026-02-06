@@ -1,6 +1,6 @@
 """Bulletin router for posts, comments, and follows."""
 
-from datetime import datetime, timezone
+import datetime as dt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_effective_scopes
 from app.database import get_db
 from app.models.bulletin import BulletinComment, BulletinFollow, BulletinPost
 from app.models.user import APIKey, User
@@ -34,7 +34,7 @@ def require_scope(required_scope: str):
         auth: tuple[User, APIKey] = Depends(get_current_user),
     ) -> tuple[User, APIKey]:
         user, api_key = auth
-        scopes = set(api_key.scopes or [])
+        scopes = get_effective_scopes(user, api_key)
 
         if required_scope not in scopes:
             raise HTTPException(
@@ -97,7 +97,7 @@ async def list_posts(
     # Apply cursor (cursor is the created_at timestamp)
     if cursor:
         try:
-            cursor_dt = datetime.fromisoformat(cursor)
+            cursor_dt = dt.datetime.fromisoformat(cursor)
             query = query.where(BulletinPost.created_at < cursor_dt)
         except ValueError:
             pass  # Invalid cursor, ignore
@@ -296,7 +296,7 @@ async def update_post(
     if data.content_md is not None:
         post.content_md = data.content_md
 
-    post.updated_at = datetime.now(timezone.utc)
+    post.updated_at = dt.datetime.now(dt.UTC)
 
     await db.commit()
 
